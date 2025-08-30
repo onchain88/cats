@@ -60,21 +60,21 @@ async function connectWallet() {
     }
 
     try {
+        // Request account access
         await window.ethereum.request({ method: 'eth_requestAccounts' });
+        
+        // Check current network
+        const chainId = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
+        
+        // If not on a supported network, switch to Polygon
+        if (!NETWORKS[chainId]) {
+            await switchToPolygon();
+            return;
+        }
+        
         provider = new ethers.BrowserProvider(window.ethereum);
         signer = await provider.getSigner();
         userAddress = await signer.getAddress();
-        
-        const network = await provider.getNetwork();
-        const chainId = Number(network.chainId);
-        
-        if (!NETWORKS[chainId]) {
-            const supportedNetworks = Object.entries(NETWORKS)
-                .map(([id, net]) => `${net.name} (${id})`)
-                .join(', ');
-            alert(`Unsupported network. Please switch to one of: ${supportedNetworks}`);
-            return;
-        }
         
         currentNetwork = NETWORKS[chainId];
         CONTRACT_ADDRESS = currentNetwork.addresses.OnchainCats;
@@ -92,6 +92,47 @@ async function connectWallet() {
     } catch (error) {
         console.error('Error connecting wallet:', error);
         alert('Failed to connect wallet');
+    }
+}
+
+async function switchToPolygon() {
+    const polygonChainId = '0x89'; // 137 in hex
+    
+    try {
+        await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: polygonChainId }],
+        });
+        // Reconnect after switching
+        await connectWallet();
+    } catch (switchError) {
+        // This error code indicates that the chain has not been added to MetaMask
+        if (switchError.code === 4902) {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                        chainId: polygonChainId,
+                        chainName: 'Polygon',
+                        nativeCurrency: {
+                            name: 'POL',
+                            symbol: 'POL',
+                            decimals: 18
+                        },
+                        rpcUrls: ['https://polygon-rpc.com/'],
+                        blockExplorerUrls: ['https://polygonscan.com/']
+                    }],
+                });
+                // Reconnect after adding
+                await connectWallet();
+            } catch (addError) {
+                console.error('Error adding Polygon network:', addError);
+                alert('Failed to add Polygon network to MetaMask');
+            }
+        } else {
+            console.error('Error switching to Polygon:', switchError);
+            alert('Failed to switch to Polygon network');
+        }
     }
 }
 
