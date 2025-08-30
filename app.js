@@ -61,8 +61,21 @@ const sendToAddress = document.getElementById('sendToAddress');
 const confirmSendBtn = document.getElementById('confirmSendBtn');
 const cancelSendBtn = document.getElementById('cancelSendBtn');
 
+// Mobile detection helper function
+function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
 async function connectWallet() {
     if (typeof window.ethereum === 'undefined') {
+        // Check if on mobile browser
+        if (isMobile()) {
+            // Get current URL without protocol
+            const currentUrl = window.location.href.replace(/^https?:\/\//, '');
+            // Redirect to MetaMask deep link
+            window.location.href = `https://metamask.app.link/dapp/${currentUrl}`;
+            return;
+        }
         alert('Please install MetaMask to use this dApp!');
         return;
     }
@@ -384,6 +397,12 @@ async function initReadOnlyContract() {
     const readOnlyProvider = new ethers.JsonRpcProvider(currentNetwork.rpcUrl);
     readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, readOnlyProvider);
     
+    // Set contract to readOnlyContract if wallet is not connected
+    if (!contract) {
+        contract = readOnlyContract;
+        provider = readOnlyProvider;
+    }
+    
     updateTokenSymbolDisplay();
 }
 
@@ -489,6 +508,11 @@ function displayNFT(tokenId, isAvailable, owner, tokenURI, price) {
     
     const isOwner = userAddress && owner && owner.toLowerCase() === userAddress.toLowerCase();
     
+    // OpenSea URL (Polygon network)
+    const openSeaUrl = currentNetwork && currentNetwork.name === 'Polygon' && !isAvailable
+        ? `https://opensea.io/assets/matic/${CONTRACT_ADDRESS}/${tokenId}`
+        : null;
+    
     card.innerHTML = `
         <div class="nft-image">
             ${imageContent}
@@ -509,6 +533,22 @@ function displayNFT(tokenId, isAvailable, owner, tokenURI, price) {
                     </span>
                 </div>`
             }
+            <div class="nft-actions">
+                <button class="action-button back-button" onclick="backToGallery()">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                    Back to Gallery
+                </button>
+                ${openSeaUrl ? 
+                    `<a href="${openSeaUrl}" target="_blank" rel="noopener noreferrer" class="action-button opensea-button">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                        </svg>
+                        View on OpenSea
+                    </a>` : ''
+                }
+            </div>
             ${isAvailable ? 
                 `<button class="buy-button" onclick="buyNFT(${tokenId})">Buy Now</button>` :
                 isOwner ?
@@ -657,12 +697,240 @@ nftIdInput.addEventListener('keypress', (e) => {
     }
 });
 
+// Gallery view state
+let galleryItems = [];
+let isLoadingGallery = false;
+let lastLoadedId = null;
+const ITEMS_PER_LOAD = 15;
+const CACHE_KEY = 'onchainCatsGalleryCache';
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+
+// Get cached data with expiry check
+function getCachedData() {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return {};
+    
+    const data = JSON.parse(cached);
+    const now = Date.now();
+    
+    // Clean expired items
+    Object.keys(data).forEach(id => {
+        if (now - data[id].timestamp > CACHE_EXPIRY) {
+            delete data[id];
+        }
+    });
+    
+    return data;
+}
+
+// Save data to cache
+function saveToCache(id, data) {
+    const cache = getCachedData();
+    cache[id] = {
+        ...data,
+        timestamp: Date.now()
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+}
+
+// Load gallery items
+async function loadGalleryItems() {
+    if (isLoadingGallery) return;
+    
+    // Wait for contract to be initialized
+    if (!contract) {
+        console.log('Contract not initialized yet, waiting...');
+        return;
+    }
+    
+    isLoadingGallery = true;
+    const galleryLoader = document.getElementById('galleryLoader');
+    const spinner = galleryLoader.querySelector('.loader-spinner');
+    
+    // Show spinner when loading
+    if (spinner) {
+        spinner.style.display = 'block';
+    }
+    
+    try {
+        const startId = lastLoadedId ? lastLoadedId + 1 : Math.floor(Math.random() * 9000) + 1;
+        const cache = getCachedData();
+        
+        for (let i = 0; i < ITEMS_PER_LOAD; i++) {
+            const tokenId = startId + i;
+            if (tokenId > 10000) break;
+            
+            // Check cache first
+            if (cache[tokenId]) {
+                addGalleryItem(tokenId, cache[tokenId]);
+            } else {
+                // Load from contract
+                try {
+                    const uri = await contract.tokenURI(tokenId);
+                    const response = await fetch(uri);
+                    const metadata = await response.json();
+                    
+                    const itemData = {
+                        name: metadata.name,
+                        image: metadata.image
+                    };
+                    
+                    saveToCache(tokenId, itemData);
+                    addGalleryItem(tokenId, itemData);
+                } catch (error) {
+                    console.error(`Failed to load token ${tokenId}:`, error);
+                }
+            }
+        }
+        
+        lastLoadedId = startId + ITEMS_PER_LOAD - 1;
+    } finally {
+        isLoadingGallery = false;
+        // Keep loader visible but hide spinner
+        const spinner = galleryLoader.querySelector('.loader-spinner');
+        if (spinner) {
+            spinner.style.display = 'none';
+        }
+    }
+}
+
+// Add item to gallery grid
+function addGalleryItem(tokenId, data) {
+    const galleryGrid = document.getElementById('galleryGrid');
+    
+    const item = document.createElement('div');
+    item.className = 'gallery-item';
+    item.dataset.tokenId = tokenId;
+    
+    const img = document.createElement('img');
+    img.src = data.image;
+    img.alt = data.name;
+    img.loading = 'lazy';
+    
+    const idLabel = document.createElement('div');
+    idLabel.className = 'gallery-item-id';
+    idLabel.textContent = `#${tokenId}`;
+    
+    item.appendChild(img);
+    item.appendChild(idLabel);
+    
+    item.addEventListener('click', () => {
+        showSingleNFT(tokenId);
+    });
+    
+    galleryGrid.appendChild(item);
+    galleryItems.push(item);
+}
+
+// Show single NFT view
+async function showSingleNFT(tokenId) {
+    const galleryView = document.getElementById('galleryView');
+    const nftDisplay = document.getElementById('nftDisplay');
+    const searchSection = document.querySelector('.search-section');
+    
+    galleryView.style.display = 'none';
+    nftDisplay.style.display = 'block';
+    searchSection.style.display = 'block';
+    
+    // Update URL
+    window.history.pushState({ id: tokenId }, '', `?id=${tokenId}`);
+    
+    // Load the NFT
+    await searchNFT(tokenId);
+}
+
+// Show gallery view
+async function showGalleryView() {
+    const galleryView = document.getElementById('galleryView');
+    const nftDisplay = document.getElementById('nftDisplay');
+    const searchSection = document.querySelector('.search-section');
+    const bottomNav = document.getElementById('bottomNav');
+    
+    galleryView.style.display = 'block';
+    nftDisplay.style.display = 'none';
+    searchSection.style.display = 'none';
+    bottomNav.style.display = 'none';
+    
+    // Update URL
+    window.history.pushState({ gallery: true }, '', window.location.pathname);
+    
+    // Wait for contract initialization if needed
+    if (!contract) {
+        const checkContract = setInterval(() => {
+            if (contract) {
+                clearInterval(checkContract);
+                // Load initial items if empty
+                if (galleryItems.length === 0) {
+                    loadGalleryItems();
+                }
+            }
+        }, 100);
+    } else {
+        // Load initial items if empty
+        if (galleryItems.length === 0) {
+            loadGalleryItems();
+        }
+    }
+}
+
+// Setup intersection observer for infinite scroll
+function setupInfiniteScroll() {
+    const options = {
+        root: null,
+        rootMargin: '200px', // Load more items when within 200px of bottom
+        threshold: 0
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && !isLoadingGallery && contract) {
+                console.log('Loading more gallery items...');
+                loadGalleryItems();
+            }
+        });
+    }, options);
+    
+    const galleryLoader = document.getElementById('galleryLoader');
+    observer.observe(galleryLoader);
+}
+
+// Handle URL routing
+function handleRouting() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenId = urlParams.get('id');
+    
+    if (tokenId) {
+        searchNFT(parseInt(tokenId));
+    } else {
+        showGalleryView();
+    }
+}
+
+// Back to gallery function
+window.backToGallery = function() {
+    showGalleryView();
+}
+
+// Handle browser back/forward
+window.addEventListener('popstate', (event) => {
+    if (event.state && event.state.gallery) {
+        showGalleryView();
+    } else if (event.state && event.state.id) {
+        showSingleNFT(event.state.id);
+    } else {
+        handleRouting();
+    }
+});
+
 window.addEventListener('load', async () => {
     // Initialize read-only contract for non-wallet users
     await initReadOnlyContract();
     
-    // Display a random NFT on page load
-    await searchNFT();
+    // Setup infinite scroll
+    setupInfiniteScroll();
+    
+    // Handle initial routing
+    handleRouting();
     
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', (accounts) => {
