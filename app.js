@@ -3,25 +3,32 @@ import contractABI from './config/abi/OnchainCats.abi.json';
 import deployedAddresses21201 from './config/deployed-addresses-21201.json';
 import deployedAddresses80002 from './config/deployed-addresses-80002.json';
 import deployedAddresses137 from './config/deployed-addresses-137.json';
+import { RPC_URLS } from './config.js';
 
 // Network configurations
 const NETWORKS = {
     21201: {
         name: 'Blocknet',
         addresses: deployedAddresses21201,
-        symbol: 'SYS'
+        symbol: 'SYS',
+        rpcUrl: RPC_URLS[21201]
     },
     80002: {
         name: 'Amoy Testnet',
         addresses: deployedAddresses80002,
-        symbol: 'POL'
+        symbol: 'POL',
+        rpcUrl: RPC_URLS[80002]
     },
     137: {
         name: 'Polygon',
         addresses: deployedAddresses137,
-        symbol: 'POL'
+        symbol: 'POL',
+        rpcUrl: RPC_URLS[137]
     }
 };
+
+// Default to Polygon for read-only operations
+const DEFAULT_CHAIN_ID = 137;
 
 let currentNetwork = null;
 let CONTRACT_ADDRESS = null;
@@ -29,6 +36,7 @@ let CONTRACT_ADDRESS = null;
 let provider;
 let signer;
 let contract;
+let readOnlyContract;
 let userAddress;
 let isAdmin = false;
 let currentRoyaltyReceiver = '';
@@ -367,6 +375,18 @@ async function withdraw() {
     }
 }
 
+// Initialize read-only contract on page load
+async function initReadOnlyContract() {
+    currentNetwork = NETWORKS[DEFAULT_CHAIN_ID];
+    CONTRACT_ADDRESS = currentNetwork.addresses.OnchainCats;
+    nativeTokenSymbol = currentNetwork.symbol;
+    
+    const readOnlyProvider = new ethers.JsonRpcProvider(currentNetwork.rpcUrl);
+    readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, readOnlyProvider);
+    
+    updateTokenSymbolDisplay();
+}
+
 async function searchNFT(tokenId = null) {
     if (tokenId === null) {
         tokenId = nftIdInput.value;
@@ -377,8 +397,10 @@ async function searchNFT(tokenId = null) {
         return;
     }
     
-    if (!contract) {
-        alert('Please connect your wallet first');
+    // Use read-only contract if wallet not connected
+    const contractToUse = contract || readOnlyContract;
+    if (!contractToUse) {
+        alert('Contract not initialized. Please refresh the page.');
         return;
     }
     
@@ -387,30 +409,30 @@ async function searchNFT(tokenId = null) {
     bottomNav.style.display = 'none';
     
     try {
-        const exists = await contract.exists(tokenId);
+        const exists = await contractToUse.exists(tokenId);
         if (!exists) {
             nftDisplay.innerHTML = '<p class="error">This NFT ID does not exist</p>';
             loadingIndicator.style.display = 'none';
             return;
         }
         
-        const isAvailable = await contract.isAvailable(tokenId);
+        const isAvailable = await contractToUse.isAvailable(tokenId);
         let owner = null;
         let tokenURI = null;
         
         if (!isAvailable) {
-            owner = await contract.ownerOf(tokenId);
+            owner = await contractToUse.ownerOf(tokenId);
         }
         
         try {
-            tokenURI = await contract.tokenURI(tokenId);
+            tokenURI = await contractToUse.tokenURI(tokenId);
         } catch (error) {
             console.log('Could not fetch tokenURI');
         }
         
         currentTokenId = parseInt(tokenId);
         nftIdInput.value = currentTokenId;
-        const price = await contract.price();
+        const price = await contractToUse.price();
         displayNFT(currentTokenId, isAvailable, owner, tokenURI, price);
         updateBottomNav(isAvailable);
         bottomNav.style.display = 'flex';
@@ -579,14 +601,20 @@ function updateBottomNav(isAvailable) {
     prevBtn.disabled = currentTokenId <= 1;
     nextBtn.disabled = currentTokenId >= 10000;
     
-    if (isAvailable) {
-        bottomBuyBtn.textContent = 'Buy Now';
-        bottomBuyBtn.disabled = false;
-        bottomBuyBtn.classList.add('buy-btn');
+    // Show buy button only if wallet is connected
+    if (!contract) {
+        bottomBuyBtn.style.display = 'none';
     } else {
-        bottomBuyBtn.textContent = 'Sold';
-        bottomBuyBtn.disabled = true;
-        bottomBuyBtn.classList.add('buy-btn');
+        bottomBuyBtn.style.display = 'block';
+        if (isAvailable) {
+            bottomBuyBtn.textContent = 'Buy Now';
+            bottomBuyBtn.disabled = false;
+            bottomBuyBtn.classList.add('buy-btn');
+        } else {
+            bottomBuyBtn.textContent = 'Sold';
+            bottomBuyBtn.disabled = true;
+            bottomBuyBtn.classList.add('buy-btn');
+        }
     }
 }
 
@@ -624,12 +652,18 @@ nftIdInput.addEventListener('keypress', (e) => {
 });
 
 window.addEventListener('load', async () => {
+    // Initialize read-only contract for non-wallet users
+    await initReadOnlyContract();
+    
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', (accounts) => {
             if (accounts.length === 0) {
                 connectWalletButton.classList.remove('connected');
                 connectWalletButton.title = 'Connect Wallet';
                 nftDisplay.innerHTML = '';
+                contract = null;
+                signer = null;
+                userAddress = null;
             } else {
                 location.reload();
             }

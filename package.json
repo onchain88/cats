@@ -2,10 +2,12 @@
   "name": "onchain-cats-marketplace",
   "version": "1.0.0",
   "description": "Minimal NFT marketplace for OnchainCats",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "generate-config": "node scripts/generate-config.js",
+    "dev": "npm run generate-config && vite",
+    "build": "npm run generate-config && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

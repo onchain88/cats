@@ -32,6 +32,10 @@ jobs:
         
       - name: Build
         run: npm run build
+        env:
+          VITE_RPC_BLOCKNET: ${{ secrets.VITE_RPC_BLOCKNET }}
+          VITE_RPC_AMOY: ${{ secrets.VITE_RPC_AMOY }}
+          VITE_RPC_POLYGON: ${{ secrets.VITE_RPC_POLYGON }}
         
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
