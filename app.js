@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import contractABI from './config/abi/OnchainCats.abi.json';
 import deployedAddresses21201 from './config/deployed-addresses-21201.json';
 import deployedAddresses80002 from './config/deployed-addresses-80002.json';
+import deployedAddresses137 from './config/deployed-addresses-137.json';
 
 // Network configurations
 const NETWORKS = {
@@ -14,9 +15,12 @@ const NETWORKS = {
         name: 'Amoy Testnet',
         addresses: deployedAddresses80002,
         symbol: 'POL'
+    },
+    137: {
+        name: 'Polygon',
+        addresses: deployedAddresses137,
+        symbol: 'POL'
     }
-    // Add more networks here as needed
-    // 137: { name: 'Polygon', addresses: deployedAddresses137, symbol: 'POL' }
 };
 
 let currentNetwork = null;
