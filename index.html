@@ -18,19 +18,36 @@
         
         <div id="adminPanel" class="admin-panel" style="display: none;">
             <h3>Admin Panel</h3>
+            <div id="adminRoyaltyInfo" class="admin-royalty-info">
+                <p>Current Royalty: <span id="currentRoyaltyPercentage">Loading...</span>% to 
+                    <span id="currentRoyaltyReceiver">Loading...</span>
+                    <button class="copy-btn" id="copyRoyaltyAddress" title="Copy address">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                        </svg>
+                    </button>
+                </p>
+            </div>
             <div class="admin-controls">
                 <div class="admin-section">
-                    <label>Set Price (ETH):</label>
+                    <label for="newPrice">Set Price (ETH):</label>
                     <input type="number" id="newPrice" step="0.001" placeholder="0.01">
                     <button id="setPriceBtn">Set Price</button>
                 </div>
                 <div class="admin-section">
                     <label>Airdrop NFT:</label>
-                    <input type="number" id="airdropTokenId" placeholder="Token ID" min="0" max="9999">
+                    <input type="number" id="airdropTokenId" placeholder="Token ID" min="1" max="10000">
                     <input type="text" id="airdropAddress" placeholder="Recipient Address">
                     <button id="airdropBtn">Airdrop</button>
                 </div>
                 <div class="admin-section">
+                    <label>Set Royalty:</label>
+                    <input type="text" id="royaltyReceiver" placeholder="Receiver Address">
+                    <input type="number" id="royaltyPercentage" placeholder="Percentage (0-100)" min="0" max="100" step="0.01">
+                    <button id="setRoyaltyBtn">Set Royalty</button>
+                </div>
+                <div class="admin-section">
+                    <span class="contract-balance">Balance: <span id="contractBalance">Loading...</span> <span data-token-symbol>ETH</span></span>
                     <button id="withdrawBtn">Withdraw Funds</button>
                 </div>
             </div>
@@ -39,13 +56,13 @@
         <main>
             <div class="stats">
                 <p>Total Supply: <span id="totalSupply">-</span></p>
-                <p>Price per NFT: <span id="nftPrice">-</span> ETH</p>
+                <p>Price per NFT: <span id="nftPrice">-</span> <span data-token-symbol>ETH</span></p>
             </div>
             
             <div class="search-section">
                 <h2>Search NFT by ID</h2>
                 <div class="search-form">
-                    <input type="number" id="nftIdInput" placeholder="Enter NFT ID (0-9999)" min="0" max="9999">
+                    <input type="number" id="nftIdInput" placeholder="Enter NFT ID (1-10000)" min="1" max="10000">
                     <button id="searchButton">Search</button>
                 </div>
             </div>

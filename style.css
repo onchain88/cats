@@ -170,6 +170,9 @@ h1 {
     font-size: 14px;
     color: #666;
     margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .nft-status.available {
@@ -177,7 +180,18 @@ h1 {
 }
 
 .nft-status.sold {
-    color: #e74c3c;
+    color: #333;
+}
+
+.nft-status.sold .owner-info {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+}
+
+.nft-status.sold .owner-address {
+    font-weight: bold;
 }
 
 .nft-description {
@@ -226,6 +240,62 @@ h1 {
 .admin-panel h3 {
     color: #c33;
     margin-bottom: 20px;
+}
+
+.admin-royalty-info {
+    background-color: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #fcc;
+}
+
+.admin-royalty-info p {
+    margin: 0;
+    font-weight: 600;
+    color: #333;
+}
+
+.copy-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    margin-left: 5px;
+    border-radius: 3px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+}
+
+.copy-btn:hover {
+    background-color: #f0f0f0;
+}
+
+.copy-btn:active {
+    background-color: #e0e0e0;
+}
+
+.copy-btn svg {
+    width: 14px;
+    height: 14px;
+    fill: #666;
+    transition: fill 0.2s;
+}
+
+.copy-btn:hover svg {
+    fill: #333;
+}
+
+.copy-btn.copied svg {
+    fill: #27ae60;
+}
+
+.contract-balance {
+    font-weight: 600;
+    color: #333;
+    margin-right: 10px;
 }
 
 .admin-controls {

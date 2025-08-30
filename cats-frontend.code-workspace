@@ -1,0 +1,12 @@
+{
+  "folders": [
+    {
+      "name": "cats-frontend",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  }
+}
