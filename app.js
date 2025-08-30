@@ -1,10 +1,26 @@
 import { ethers } from 'ethers';
 import contractABI from './config/abi/OnchainCats.abi.json';
-import deployedAddresses from './config/deployed-addresses-21201.json';
+import deployedAddresses21201 from './config/deployed-addresses-21201.json';
+import deployedAddresses80002 from './config/deployed-addresses-80002.json';
 
-const CONTRACT_ADDRESS = deployedAddresses.OnchainCats;
-const NETWORK_ID = 21201;
-const NETWORK_NAME = 'Blocknet';
+// Network configurations
+const NETWORKS = {
+    21201: {
+        name: 'Blocknet',
+        addresses: deployedAddresses21201,
+        symbol: 'SYS'
+    },
+    80002: {
+        name: 'Amoy Testnet',
+        addresses: deployedAddresses80002,
+        symbol: 'POL'
+    }
+    // Add more networks here as needed
+    // 137: { name: 'Polygon', addresses: deployedAddresses137, symbol: 'POL' }
+};
+
+let currentNetwork = null;
+let CONTRACT_ADDRESS = null;
 
 let provider;
 let signer;
@@ -17,7 +33,6 @@ let nativeTokenSymbol = 'ETH';
 let currentTokenId = null;
 
 const connectWalletButton = document.getElementById('connectWallet');
-const walletInfo = document.getElementById('walletInfo');
 const nftDisplay = document.getElementById('nftDisplay');
 const loadingIndicator = document.getElementById('loadingIndicator');
 const nftIdInput = document.getElementById('nftIdInput');
@@ -47,19 +62,27 @@ async function connectWallet() {
         userAddress = await signer.getAddress();
         
         const network = await provider.getNetwork();
-        if (Number(network.chainId) !== NETWORK_ID) {
-            alert(`Please switch to ${NETWORK_NAME} network (Chain ID: ${NETWORK_ID})`);
+        const chainId = Number(network.chainId);
+        
+        if (!NETWORKS[chainId]) {
+            const supportedNetworks = Object.entries(NETWORKS)
+                .map(([id, net]) => `${net.name} (${id})`)
+                .join(', ');
+            alert(`Unsupported network. Please switch to one of: ${supportedNetworks}`);
             return;
         }
         
-        // Get native token symbol from chain
-        await getNetworkTokenSymbol();
+        currentNetwork = NETWORKS[chainId];
+        CONTRACT_ADDRESS = currentNetwork.addresses.OnchainCats;
+        nativeTokenSymbol = currentNetwork.symbol;
+        
+        // Update token symbol display
+        updateTokenSymbolDisplay();
         
         contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
         
-        connectWalletButton.textContent = 'Connected';
-        connectWalletButton.disabled = true;
-        walletInfo.textContent = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+        connectWalletButton.classList.add('connected');
+        connectWalletButton.title = 'Wallet Connected';
         
         await checkAdminStatus();
     } catch (error) {
@@ -89,30 +112,6 @@ async function checkAdminStatus() {
     }
 }
 
-async function getNetworkTokenSymbol() {
-    try {
-        // Common chain IDs and their native token symbols
-        const chainSymbols = {
-            1: 'ETH',        // Ethereum Mainnet
-            5: 'ETH',        // Goerli
-            10: 'ETH',       // Optimism
-            56: 'BNB',       // BSC
-            137: 'MATIC',    // Polygon
-            42161: 'ETH',    // Arbitrum
-            43114: 'AVAX',   // Avalanche
-            21201: 'SYS'     // Blocknet (assuming SYS based on chain ID)
-        };
-        
-        const chainId = Number((await provider.getNetwork()).chainId);
-        nativeTokenSymbol = chainSymbols[chainId] || 'ETH';
-        
-        // Update all token symbol displays
-        updateTokenSymbolDisplay();
-    } catch (error) {
-        console.error('Error getting network token symbol:', error);
-        nativeTokenSymbol = 'ETH';
-    }
-}
 
 function updateTokenSymbolDisplay() {
     // Update all elements that show ETH
@@ -583,9 +582,8 @@ window.addEventListener('load', async () => {
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', (accounts) => {
             if (accounts.length === 0) {
-                connectWalletButton.textContent = 'Connect Wallet';
-                connectWalletButton.disabled = false;
-                walletInfo.textContent = '';
+                connectWalletButton.classList.remove('connected');
+                connectWalletButton.title = 'Connect Wallet';
                 nftDisplay.innerHTML = '';
             } else {
                 location.reload();
