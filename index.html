@@ -3,21 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OnchainCats Marketplace</title>
+    <title>OnchainCats NFT</title>
     <link rel="icon" type="image/svg+xml" href="/asset/favicon.svg" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="container">
       <header>
-        <div class="logo-section">
+        <a href="/cats" class="logo-section">
           <img src="/asset/logo.svg" alt="OnchainCats Logo" class="logo" />
           <h1>OnchainCats NFT</h1>
-        </div>
+        </a>
         <div class="wallet-section">
-          <button id="connectWallet" class="wallet-button" title="Connect Wallet">
+          <button
+            id="connectWallet"
+            class="wallet-button"
+            title="Connect Wallet"
+          >
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21 18v1a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v1h-9a2 2 0 00-2 2v8a2 2 0 002 2h9zm-9-2h10V8H12v8zm4-2.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+              <path
+                d="M21 18v1a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v1h-9a2 2 0 00-2 2v8a2 2 0 002 2h9zm-9-2h10V8H12v8zm4-2.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"
+              />
             </svg>
           </button>
         </div>
@@ -122,6 +128,13 @@
           <div id="galleryGrid" class="gallery-grid"></div>
           <div id="galleryLoader" class="gallery-loader">
             <div class="loader-spinner"></div>
+            <button
+              id="loadMoreBtn"
+              class="load-more-button"
+              style="display: none"
+            >
+              Load More
+            </button>
           </div>
         </div>
 

@@ -723,14 +723,53 @@ function getCachedData() {
     return data;
 }
 
-// Save data to cache
+// Save data to cache with size management
 function saveToCache(id, data) {
-    const cache = getCachedData();
-    cache[id] = {
-        ...data,
-        timestamp: Date.now()
-    };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    try {
+        const cache = getCachedData();
+        
+        // Limit cache size - keep only last 500 items
+        const cacheKeys = Object.keys(cache);
+        if (cacheKeys.length > 500) {
+            // Sort by timestamp and remove oldest items
+            const sortedKeys = cacheKeys.sort((a, b) => 
+                (cache[a].timestamp || 0) - (cache[b].timestamp || 0)
+            );
+            
+            // Remove oldest items to make room
+            const keysToRemove = sortedKeys.slice(0, cacheKeys.length - 400);
+            keysToRemove.forEach(key => delete cache[key]);
+            console.log(`Cache cleanup: removed ${keysToRemove.length} old items`);
+        }
+        
+        cache[id] = {
+            ...data,
+            timestamp: Date.now()
+        };
+        
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    } catch (error) {
+        if (error.name === 'QuotaExceededError') {
+            console.warn('LocalStorage quota exceeded, clearing cache...');
+            // Clear the cache and try again
+            localStorage.removeItem(CACHE_KEY);
+            
+            // Try to save just this item
+            const minimalCache = {
+                [id]: {
+                    ...data,
+                    timestamp: Date.now()
+                }
+            };
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(minimalCache));
+            } catch (e) {
+                console.error('Failed to save even after clearing cache:', e);
+            }
+        } else {
+            console.error('Cache save error:', error);
+        }
+    }
 }
 
 // Load gallery items
@@ -746,10 +785,14 @@ async function loadGalleryItems() {
     isLoadingGallery = true;
     const galleryLoader = document.getElementById('galleryLoader');
     const spinner = galleryLoader.querySelector('.loader-spinner');
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
     
-    // Show spinner when loading
+    // Show spinner and hide button when loading
     if (spinner) {
         spinner.style.display = 'block';
+    }
+    if (loadMoreBtn) {
+        loadMoreBtn.style.display = 'none';
     }
     
     try {
@@ -786,10 +829,16 @@ async function loadGalleryItems() {
         lastLoadedId = startId + ITEMS_PER_LOAD - 1;
     } finally {
         isLoadingGallery = false;
-        // Keep loader visible but hide spinner
         const spinner = galleryLoader.querySelector('.loader-spinner');
+        const loadMoreBtn = document.getElementById('loadMoreBtn');
+        
         if (spinner) {
             spinner.style.display = 'none';
+        }
+        
+        // Show load more button as fallback
+        if (loadMoreBtn && lastLoadedId < 10000) {
+            loadMoreBtn.style.display = 'block';
         }
     }
 }
@@ -928,6 +977,15 @@ window.addEventListener('load', async () => {
     
     // Setup infinite scroll
     setupInfiniteScroll();
+    
+    // Setup load more button
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    if (loadMoreBtn) {
+        loadMoreBtn.addEventListener('click', () => {
+            console.log('Manual load triggered');
+            loadGalleryItems();
+        });
+    }
     
     // Handle initial routing
     handleRouting();
