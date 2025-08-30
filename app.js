@@ -392,7 +392,13 @@ async function searchNFT(tokenId = null) {
         tokenId = nftIdInput.value;
     }
     
-    if (tokenId === '' || tokenId < 1 || tokenId > 10000) {
+    // If no token ID provided, select a random one
+    if (tokenId === '') {
+        tokenId = Math.floor(Math.random() * 10000) + 1;
+        nftIdInput.value = tokenId;
+    }
+    
+    if (tokenId < 1 || tokenId > 10000) {
         alert('Please enter a valid NFT ID between 1 and 10000');
         return;
     }
@@ -654,6 +660,9 @@ nftIdInput.addEventListener('keypress', (e) => {
 window.addEventListener('load', async () => {
     // Initialize read-only contract for non-wallet users
     await initReadOnlyContract();
+    
+    // Display a random NFT on page load
+    await searchNFT();
     
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', (accounts) => {
