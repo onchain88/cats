@@ -14,16 +14,25 @@ let isAdmin = false;
 let currentRoyaltyReceiver = '';
 let currentRoyaltyPercentage = 0;
 let nativeTokenSymbol = 'ETH';
+let currentTokenId = null;
 
 const connectWalletButton = document.getElementById('connectWallet');
 const walletInfo = document.getElementById('walletInfo');
 const nftDisplay = document.getElementById('nftDisplay');
 const loadingIndicator = document.getElementById('loadingIndicator');
-const totalSupplyElement = document.getElementById('totalSupply');
-const nftPriceElement = document.getElementById('nftPrice');
 const nftIdInput = document.getElementById('nftIdInput');
 const searchButton = document.getElementById('searchButton');
 const adminPanel = document.getElementById('adminPanel');
+const adminToggle = document.getElementById('adminToggle');
+const bottomNav = document.getElementById('bottomNav');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const bottomBuyBtn = document.getElementById('bottomBuyBtn');
+const sendModal = document.getElementById('sendModal');
+const sendNftName = document.getElementById('sendNftName');
+const sendToAddress = document.getElementById('sendToAddress');
+const confirmSendBtn = document.getElementById('confirmSendBtn');
+const cancelSendBtn = document.getElementById('cancelSendBtn');
 
 async function connectWallet() {
     if (typeof window.ethereum === 'undefined') {
@@ -53,7 +62,6 @@ async function connectWallet() {
         walletInfo.textContent = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
         
         await checkAdminStatus();
-        await loadContractData();
     } catch (error) {
         console.error('Error connecting wallet:', error);
         alert('Failed to connect wallet');
@@ -66,11 +74,14 @@ async function checkAdminStatus() {
         isAdmin = virtualOwner.toLowerCase() === userAddress.toLowerCase();
         
         if (isAdmin) {
-            adminPanel.style.display = 'block';
+            adminToggle.style.display = 'block';
+            adminPanel.classList.add('collapsed');
             setupAdminControls();
             await loadAdminRoyaltyInfo();
             await loadContractBalance();
+            await loadDefaultPrice();
         } else {
+            adminToggle.style.display = 'none';
             adminPanel.style.display = 'none';
         }
     } catch (error) {
@@ -117,20 +128,16 @@ function updateTokenSymbolDisplay() {
     }
 }
 
-async function loadContractData() {
+async function loadDefaultPrice() {
     try {
-        const totalSupply = await contract.totalSupply();
         const price = await contract.price();
-        
-        totalSupplyElement.textContent = totalSupply.toString();
-        nftPriceElement.textContent = ethers.formatEther(price);
         
         // Set default price in admin form if admin
         if (isAdmin) {
             document.getElementById('newPrice').value = ethers.formatEther(price);
         }
     } catch (error) {
-        console.error('Error loading contract data:', error);
+        console.error('Error loading default price:', error);
     }
 }
 
@@ -180,6 +187,23 @@ function setupAdminControls() {
     document.getElementById('setRoyaltyBtn').addEventListener('click', setRoyalty);
     document.getElementById('withdrawBtn').addEventListener('click', withdraw);
     document.getElementById('copyRoyaltyAddress').addEventListener('click', copyRoyaltyAddress);
+    adminToggle.addEventListener('click', toggleAdminPanel);
+}
+
+function toggleAdminPanel() {
+    const isCollapsed = adminPanel.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+        adminPanel.classList.remove('collapsed');
+        adminPanel.style.display = 'block';
+        adminToggle.textContent = 'Admin Panel ▲';
+        adminToggle.classList.add('open');
+    } else {
+        adminPanel.classList.add('collapsed');
+        adminPanel.style.display = 'none';
+        adminToggle.textContent = 'Admin Panel ▼';
+        adminToggle.classList.remove('open');
+    }
 }
 
 async function loadContractBalance() {
@@ -221,7 +245,7 @@ async function setPrice() {
         const tx = await contract.setPrice(priceInWei);
         await tx.wait();
         alert('Price updated successfully!');
-        await loadContractData();
+        await loadDefaultPrice();
     } catch (error) {
         console.error('Error setting price:', error);
         alert('Failed to set price: ' + error.message);
@@ -299,8 +323,10 @@ async function withdraw() {
     }
 }
 
-async function searchNFT() {
-    const tokenId = nftIdInput.value;
+async function searchNFT(tokenId = null) {
+    if (tokenId === null) {
+        tokenId = nftIdInput.value;
+    }
     
     if (tokenId === '' || tokenId < 1 || tokenId > 10000) {
         alert('Please enter a valid NFT ID between 1 and 10000');
@@ -314,6 +340,7 @@ async function searchNFT() {
     
     loadingIndicator.style.display = 'block';
     nftDisplay.innerHTML = '';
+    bottomNav.style.display = 'none';
     
     try {
         const exists = await contract.exists(tokenId);
@@ -337,7 +364,12 @@ async function searchNFT() {
             console.log('Could not fetch tokenURI');
         }
         
-        displayNFT(tokenId, isAvailable, owner, tokenURI);
+        currentTokenId = parseInt(tokenId);
+        nftIdInput.value = currentTokenId;
+        const price = await contract.price();
+        displayNFT(currentTokenId, isAvailable, owner, tokenURI, price);
+        updateBottomNav(isAvailable);
+        bottomNav.style.display = 'flex';
     } catch (error) {
         console.error('Error searching NFT:', error);
         nftDisplay.innerHTML = '<p class="error">Failed to load NFT information</p>';
@@ -346,7 +378,7 @@ async function searchNFT() {
     }
 }
 
-function displayNFT(tokenId, isAvailable, owner, tokenURI) {
+function displayNFT(tokenId, isAvailable, owner, tokenURI, price) {
     const card = document.createElement('div');
     card.className = 'nft-card';
     
@@ -383,6 +415,8 @@ function displayNFT(tokenId, isAvailable, owner, tokenURI) {
         <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
     </svg>`;
     
+    const isOwner = userAddress && owner && owner.toLowerCase() === userAddress.toLowerCase();
+    
     card.innerHTML = `
         <div class="nft-image">
             ${imageContent}
@@ -391,21 +425,23 @@ function displayNFT(tokenId, isAvailable, owner, tokenURI) {
             <div class="nft-id">${metadata?.name || `Cat #${tokenId}`}</div>
             ${metadata?.description ? `<div class="nft-description">${metadata.description}</div>` : ''}
             ${attributesHTML}
-            <div class="nft-status ${isAvailable ? 'available' : 'sold'}">
-                ${isAvailable ? 
-                    'Available' : 
-                    `<span>Owned by</span>
+            ${isAvailable ? 
+                `<div class="nft-price">PRICE: ${ethers.formatEther(price)} ${nativeTokenSymbol}</div>` :
+                `<div class="nft-status sold">
+                    <span>Owned by</span>
                     <span class="owner-info">
                         <span class="owner-address">${owner.slice(0, 6)}...${owner.slice(-4)}</span>
                         <button class="copy-btn" onclick="copyAddress('${owner}')" title="Copy address">
                             ${copyIcon}
                         </button>
-                    </span>`
-                }
-            </div>
+                    </span>
+                </div>`
+            }
             ${isAvailable ? 
                 `<button class="buy-button" onclick="buyNFT(${tokenId})">Buy Now</button>` :
-                `<button class="buy-button" disabled>Sold</button>`
+                isOwner ?
+                    `<button class="buy-button send-button" onclick="openSendModal(${tokenId}, '${metadata?.name || `Cat #${tokenId}`}')">Send</button>` :
+                    `<button class="buy-button" disabled>Sold</button>`
             }
         </div>
     `;
@@ -426,6 +462,47 @@ window.copyAddress = function(address) {
     });
 }
 
+window.openSendModal = function(tokenId, nftName) {
+    sendNftName.textContent = nftName;
+    sendToAddress.value = '';
+    sendModal.style.display = 'flex';
+    sendToAddress.focus();
+    
+    confirmSendBtn.onclick = () => sendNFT(tokenId);
+}
+
+async function sendNFT(tokenId) {
+    const recipient = sendToAddress.value.trim();
+    
+    if (!ethers.isAddress(recipient)) {
+        alert('Please enter a valid recipient address');
+        return;
+    }
+    
+    if (recipient.toLowerCase() === userAddress.toLowerCase()) {
+        alert('Cannot send to your own address');
+        return;
+    }
+    
+    confirmSendBtn.disabled = true;
+    confirmSendBtn.textContent = 'Sending...';
+    
+    try {
+        const tx = await contract.transferFrom(userAddress, recipient, tokenId);
+        await tx.wait();
+        
+        alert(`Successfully sent NFT #${tokenId} to ${recipient}`);
+        sendModal.style.display = 'none';
+        await searchNFT(tokenId);
+    } catch (error) {
+        console.error('Error sending NFT:', error);
+        alert('Failed to send NFT: ' + error.message);
+    } finally {
+        confirmSendBtn.disabled = false;
+        confirmSendBtn.textContent = 'Send';
+    }
+}
+
 window.buyNFT = async function(tokenId) {
     if (!signer) {
         alert('Please connect your wallet first');
@@ -444,7 +521,8 @@ window.buyNFT = async function(tokenId) {
         await tx.wait();
         
         alert(`Successfully purchased Cat #${tokenId}!`);
-        searchNFT();
+        await searchNFT(tokenId);
+        updateBottomNav(false);
     } catch (error) {
         console.error('Error buying NFT:', error);
         alert('Failed to buy NFT: ' + error.message);
@@ -453,8 +531,47 @@ window.buyNFT = async function(tokenId) {
     }
 }
 
+function updateBottomNav(isAvailable) {
+    prevBtn.disabled = currentTokenId <= 1;
+    nextBtn.disabled = currentTokenId >= 10000;
+    
+    if (isAvailable) {
+        bottomBuyBtn.textContent = 'Buy Now';
+        bottomBuyBtn.disabled = false;
+        bottomBuyBtn.classList.add('buy-btn');
+    } else {
+        bottomBuyBtn.textContent = 'Sold';
+        bottomBuyBtn.disabled = true;
+        bottomBuyBtn.classList.add('buy-btn');
+    }
+}
+
+async function navigatePrev() {
+    if (currentTokenId > 1) {
+        await searchNFT(currentTokenId - 1);
+    }
+}
+
+async function navigateNext() {
+    if (currentTokenId < 10000) {
+        await searchNFT(currentTokenId + 1);
+    }
+}
+
+async function bottomBuyNFT() {
+    if (currentTokenId) {
+        await buyNFT(currentTokenId);
+    }
+}
+
 connectWalletButton.addEventListener('click', connectWallet);
-searchButton.addEventListener('click', searchNFT);
+searchButton.addEventListener('click', () => searchNFT());
+prevBtn.addEventListener('click', navigatePrev);
+nextBtn.addEventListener('click', navigateNext);
+bottomBuyBtn.addEventListener('click', bottomBuyNFT);
+cancelSendBtn.addEventListener('click', () => {
+    sendModal.style.display = 'none';
+});
 
 nftIdInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
