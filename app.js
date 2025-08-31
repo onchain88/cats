@@ -37,6 +37,7 @@ let provider;
 let signer;
 let contract;
 let readOnlyContract;
+let readOnlyProvider;
 let userAddress;
 let isAdmin = false;
 let currentRoyaltyReceiver = '';
@@ -169,6 +170,9 @@ async function checkAdminStatus() {
             await loadAdminRoyaltyInfo();
             await loadContractBalance();
             await loadDefaultPrice();
+            
+            // Setup copy button for contract address
+            document.getElementById('copyContractAddress').addEventListener('click', copyContractAddress);
         } else {
             adminToggle.style.display = 'none';
             adminPanel.style.display = 'none';
@@ -263,11 +267,52 @@ function toggleAdminPanel() {
         adminPanel.style.display = 'block';
         adminToggle.textContent = 'Admin Panel ▲';
         adminToggle.classList.add('open');
+        updateAdminPanelInfo();
     } else {
         adminPanel.classList.add('collapsed');
         adminPanel.style.display = 'none';
         adminToggle.textContent = 'Admin Panel ▼';
         adminToggle.classList.remove('open');
+    }
+}
+
+async function updateAdminPanelInfo() {
+    // Update contract address
+    if (CONTRACT_ADDRESS) {
+        document.getElementById('contractAddress').textContent = CONTRACT_ADDRESS;
+    }
+    
+    // Update contract URI
+    if (contract) {
+        try {
+            const contractURI = await contract.contractURI();
+            const contractURIElement = document.getElementById('contractURI');
+            
+            if (!contractURI) {
+                contractURIElement.textContent = 'Not set';
+            } else if (contractURI.startsWith('data:application/json;base64,')) {
+                // Decode base64 JSON
+                const base64Data = contractURI.replace('data:application/json;base64,', '');
+                const jsonString = atob(base64Data);
+                const jsonData = JSON.parse(jsonString);
+                
+                // Create formatted display
+                contractURIElement.innerHTML = '<pre>' + JSON.stringify(jsonData, null, 2) + '</pre>';
+            } else if (contractURI.startsWith('data:application/json,')) {
+                // Decode URL-encoded JSON
+                const jsonString = decodeURIComponent(contractURI.replace('data:application/json,', ''));
+                const jsonData = JSON.parse(jsonString);
+                
+                // Create formatted display
+                contractURIElement.innerHTML = '<pre>' + JSON.stringify(jsonData, null, 2) + '</pre>';
+            } else {
+                // Display as-is if it's a URL or other format
+                contractURIElement.textContent = contractURI;
+            }
+        } catch (error) {
+            console.error('Error fetching contractURI:', error);
+            document.getElementById('contractURI').textContent = 'Error loading';
+        }
     }
 }
 
@@ -285,6 +330,21 @@ function copyRoyaltyAddress() {
     if (currentRoyaltyReceiver) {
         navigator.clipboard.writeText(currentRoyaltyReceiver).then(() => {
             const btn = document.getElementById('copyRoyaltyAddress');
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.classList.remove('copied');
+            }, 1500);
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            alert('Failed to copy address');
+        });
+    }
+}
+
+function copyContractAddress() {
+    if (CONTRACT_ADDRESS) {
+        navigator.clipboard.writeText(CONTRACT_ADDRESS).then(() => {
+            const btn = document.getElementById('copyContractAddress');
             btn.classList.add('copied');
             setTimeout(() => {
                 btn.classList.remove('copied');
@@ -390,20 +450,44 @@ async function withdraw() {
 
 // Initialize read-only contract on page load
 async function initReadOnlyContract() {
-    currentNetwork = NETWORKS[DEFAULT_CHAIN_ID];
-    CONTRACT_ADDRESS = currentNetwork.addresses.OnchainCats;
-    nativeTokenSymbol = currentNetwork.symbol;
-    
-    readOnlyProvider = new ethers.JsonRpcProvider(currentNetwork.rpcUrl);
-    readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, readOnlyProvider);
-    
-    // Always set contract to readOnlyContract if wallet is not connected
-    if (!contract) {
-        contract = readOnlyContract;
-        provider = readOnlyProvider;
+    try {
+        currentNetwork = NETWORKS[DEFAULT_CHAIN_ID];
+        CONTRACT_ADDRESS = currentNetwork.addresses.OnchainCats;
+        nativeTokenSymbol = currentNetwork.symbol;
+        
+        console.log('Initializing read-only contract...');
+        console.log('Network:', currentNetwork.name);
+        console.log('RPC URL:', currentNetwork.rpcUrl);
+        console.log('Contract Address:', CONTRACT_ADDRESS);
+        
+        // Always use read-only contract for gallery
+        readOnlyProvider = new ethers.JsonRpcProvider(currentNetwork.rpcUrl);
+        readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, readOnlyProvider);
+        
+        // Test the connection
+        try {
+            const network = await readOnlyProvider.getNetwork();
+            console.log('Successfully connected to network:', network.chainId);
+            
+            // Test contract call
+            const testTokenId = 1;
+            const uri = await readOnlyContract.tokenURI(testTokenId);
+            console.log('Test tokenURI call successful:', uri ? 'URI exists' : 'No URI');
+        } catch (testError) {
+            console.error('Read-only provider test failed:', testError);
+        }
+        
+        // Set as default contract if no wallet connected
+        if (!contract) {
+            contract = readOnlyContract;
+            provider = readOnlyProvider;
+        }
+        
+        updateTokenSymbolDisplay();
+        console.log('Read-only contract initialization complete');
+    } catch (error) {
+        console.error('Failed to initialize read-only contract:', error);
     }
-    
-    updateTokenSymbolDisplay();
 }
 
 async function searchNFT(tokenId = null) {
@@ -778,10 +862,9 @@ function saveToCache(id, data) {
 async function loadGalleryItems() {
     if (isLoadingGallery) return;
     
-    // Use readOnlyContract if contract is not available
-    const activeContract = contract || readOnlyContract;
-    if (!activeContract) {
-        console.log('No contract available, waiting...');
+    // Always use readOnlyContract for gallery
+    if (!readOnlyContract) {
+        console.log('Read-only contract not initialized');
         return;
     }
     
@@ -812,7 +895,15 @@ async function loadGalleryItems() {
             } else {
                 // Load from contract
                 try {
-                    const uri = await activeContract.tokenURI(tokenId);
+                    console.log(`Loading token ${tokenId} from contract...`);
+                    const uri = await readOnlyContract.tokenURI(tokenId);
+                    console.log(`Token URI for ${tokenId}:`, uri);
+                    
+                    if (!uri || uri === '0x') {
+                        console.log(`Token ${tokenId} has no URI`);
+                        continue;
+                    }
+                    
                     const response = await fetch(uri);
                     const metadata = await response.json();
                     
@@ -825,6 +916,10 @@ async function loadGalleryItems() {
                     addGalleryItem(tokenId, itemData);
                 } catch (error) {
                     console.error(`Failed to load token ${tokenId}:`, error);
+                    // Skip tokens that don't exist
+                    if (error.code === 'BAD_DATA' || error.message.includes('could not decode result data')) {
+                        console.log(`Token ${tokenId} doesn't exist, skipping...`);
+                    }
                 }
             }
         }
@@ -906,23 +1001,9 @@ async function showGalleryView() {
     // Update URL
     window.history.pushState({ gallery: true }, '', window.location.pathname);
     
-    // Wait for contract initialization if needed
-    const activeContract = contract || readOnlyContract;
-    if (!activeContract) {
-        const checkContract = setInterval(() => {
-            if (contract || readOnlyContract) {
-                clearInterval(checkContract);
-                // Load initial items if empty
-                if (galleryItems.length === 0) {
-                    loadGalleryItems();
-                }
-            }
-        }, 100);
-    } else {
-        // Load initial items if empty
-        if (galleryItems.length === 0) {
-            loadGalleryItems();
-        }
+    // Load initial items if empty
+    if (galleryItems.length === 0) {
+        loadGalleryItems();
     }
 }
 
