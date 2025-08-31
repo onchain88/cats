@@ -564,7 +564,7 @@ function displayNFT(tokenId, isAvailable, owner, tokenURI, price) {
     const isOwner = userAddress && owner && owner.toLowerCase() === userAddress.toLowerCase();
     
     // OpenSea URL (Polygon network)
-    const openSeaUrl = currentNetwork && currentNetwork.name === 'Polygon' && !isAvailable
+    const openSeaUrl = currentNetwork && currentNetwork.name === 'Polygon'
         ? `https://opensea.io/assets/matic/${CONTRACT_ADDRESS}/${tokenId}`
         : null;
     
@@ -576,17 +576,18 @@ function displayNFT(tokenId, isAvailable, owner, tokenURI, price) {
             <div class="nft-id">${metadata?.name || `Cat #${tokenId}`}</div>
             ${metadata?.description ? `<div class="nft-description">${metadata.description}</div>` : ''}
             ${attributesHTML}
+            <div class="nft-status">
+                <span>Owned by</span>
+                <span class="owner-info">
+                    <span class="owner-address">${owner.slice(0, 6)}...${owner.slice(-4)}</span>
+                    <button class="copy-btn" onclick="copyAddress('${owner}')" title="Copy address">
+                        ${copyIcon}
+                    </button>
+                </span>
+            </div>
             ${isAvailable ? 
                 `<div class="nft-price">PRICE: ${ethers.formatEther(price)} ${nativeTokenSymbol}</div>` :
-                `<div class="nft-status sold">
-                    <span>Owned by</span>
-                    <span class="owner-info">
-                        <span class="owner-address">${owner.slice(0, 6)}...${owner.slice(-4)}</span>
-                        <button class="copy-btn" onclick="copyAddress('${owner}')" title="Copy address">
-                            ${copyIcon}
-                        </button>
-                    </span>
-                </div>`
+                ''
             }
             <div class="nft-actions">
                 <button class="action-button back-button" onclick="backToGallery()">
