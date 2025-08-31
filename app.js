@@ -435,17 +435,27 @@ async function initReadOnlyContract() {
         readOnlyProvider = new ethers.JsonRpcProvider(currentNetwork.rpcUrl);
         readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, readOnlyProvider);
         
-        // Test the connection
-        try {
-            const network = await readOnlyProvider.getNetwork();
-            console.log('Successfully connected to network:', network.chainId);
-            
-            // Test contract call
-            const testTokenId = 1;
-            const uri = await readOnlyContract.tokenURI(testTokenId);
-            console.log('Test tokenURI call successful:', uri ? 'URI exists' : 'No URI');
-        } catch (testError) {
-            console.error('Read-only provider test failed:', testError);
+        // Wait for provider to be ready before making calls
+        await readOnlyProvider.ready;
+        
+        // Test the connection with retry logic
+        let connectionSuccessful = false;
+        for (let i = 0; i < 3; i++) {
+            try {
+                const network = await readOnlyProvider.getNetwork();
+                console.log('Successfully connected to network:', network.chainId);
+                connectionSuccessful = true;
+                break;
+            } catch (error) {
+                console.warn(`Connection attempt ${i + 1} failed:`, error.message);
+                if (i < 2) {
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+                }
+            }
+        }
+        
+        if (!connectionSuccessful) {
+            console.error('Failed to establish connection after 3 attempts');
         }
         
         // Set as default contract if no wallet connected
@@ -852,12 +862,21 @@ async function loadGalleryItems() {
     }
     
     try {
-        const startId = lastLoadedId ? lastLoadedId + 1 : Math.floor(Math.random() * 9000) + 1;
+        // Get total supply to know how many tokens exist
+        const totalSupply = await readOnlyContract.totalSupply();
+        const maxTokenId = Number(totalSupply);
+        
+        if (maxTokenId === 0) {
+            console.log('No tokens minted yet');
+            return;
+        }
+        
+        const startId = lastLoadedId ? lastLoadedId + 1 : Math.floor(Math.random() * Math.min(maxTokenId, 9000)) + 1;
         const cache = getCachedData();
         
         for (let i = 0; i < ITEMS_PER_LOAD; i++) {
             const tokenId = startId + i;
-            if (tokenId > 10000) break;
+            if (tokenId > maxTokenId || tokenId > 10000) break;
             
             // Check cache first
             if (cache[tokenId]) {
@@ -866,20 +885,59 @@ async function loadGalleryItems() {
                 // Load from contract
                 try {
                     console.log(`Loading token ${tokenId} from contract...`);
-                    const uri = await readOnlyContract.tokenURI(tokenId);
-                    console.log(`Token URI for ${tokenId}:`, uri);
+                    
+                    // First check if token exists by trying to get owner
+                    let tokenExists = false;
+                    try {
+                        await readOnlyContract.ownerOf(tokenId);
+                        tokenExists = true;
+                    } catch (ownerError) {
+                        // Token doesn't exist - this is expected for unminted tokens
+                        continue;
+                    }
+                    
+                    if (!tokenExists) continue;
+                    
+                    // Now safely get token URI
+                    let uri;
+                    try {
+                        uri = await readOnlyContract.tokenURI(tokenId);
+                        console.log(`Token URI for ${tokenId}:`, uri);
+                    } catch (uriError) {
+                        console.warn(`Failed to get URI for token ${tokenId}:`, uriError.message);
+                        continue;
+                    }
                     
                     if (!uri || uri === '0x') {
                         console.log(`Token ${tokenId} has no URI`);
                         continue;
                     }
                     
-                    const response = await fetch(uri);
-                    const metadata = await response.json();
+                    let metadata;
+                    
+                    // Handle data URIs
+                    if (uri.startsWith('data:')) {
+                        try {
+                            const json = JSON.parse(atob(uri.split(',')[1]));
+                            metadata = json;
+                        } catch (e) {
+                            console.error(`Failed to parse data URI for token ${tokenId}:`, e);
+                            continue;
+                        }
+                    } else {
+                        // Handle HTTP URIs
+                        try {
+                            const response = await fetch(uri);
+                            metadata = await response.json();
+                        } catch (fetchError) {
+                            console.error(`Failed to fetch metadata for token ${tokenId}:`, fetchError);
+                            continue;
+                        }
+                    }
                     
                     const itemData = {
-                        name: metadata.name,
-                        image: metadata.image
+                        name: metadata.name || `Cat #${tokenId}`,
+                        image: metadata.image || ''
                     };
                     
                     saveToCache(tokenId, itemData);
