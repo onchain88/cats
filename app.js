@@ -458,21 +458,6 @@ async function initReadOnlyContract() {
             console.error('Failed to establish connection after 3 attempts');
         }
         
-        // Test tokenURI for a few tokens
-        console.log('Testing tokenURI calls...');
-        for (let i = 1; i <= 5; i++) {
-            try {
-                // First check if token exists
-                const owner = await readOnlyContract.ownerOf(i);
-                console.log(`Token ${i} owner:`, owner);
-                
-                // Then try to get URI
-                const uri = await readOnlyContract.tokenURI(i);
-                console.log(`Token ${i} URI:`, uri);
-            } catch (error) {
-                console.error(`Token ${i} error:`, error.message);
-            }
-        }
         
         // Set as default contract if no wallet connected
         if (!contract) {
