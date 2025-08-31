@@ -452,7 +452,9 @@ async function searchNFT(tokenId = null) {
         try {
             tokenURI = await contractToUse.tokenURI(tokenId);
         } catch (error) {
-            console.log('Could not fetch tokenURI:', error.message);
+            console.warn(`Failed to load token ${tokenId}:`, error.message);
+            // If tokenURI fails, continue without metadata
+            tokenURI = null;
         }
         
         currentTokenId = parseInt(tokenId);

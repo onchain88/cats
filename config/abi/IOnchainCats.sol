@@ -21,6 +21,7 @@ interface IOnchainCats {
     function buyMultiple(uint256[] tokenIds) external payable;
     function catMetadata() external view returns (address);
     function claim(uint256 tokenId) external;
+    function contractURI() external view returns (string);
     function exists(uint256 tokenId) external pure returns (bool);
     function getApproved(uint256 tokenId) external view returns (address);
     function isApprovedForAll(address owner, address operator) external view returns (bool);
