@@ -394,10 +394,10 @@ async function initReadOnlyContract() {
     CONTRACT_ADDRESS = currentNetwork.addresses.OnchainCats;
     nativeTokenSymbol = currentNetwork.symbol;
     
-    const readOnlyProvider = new ethers.JsonRpcProvider(currentNetwork.rpcUrl);
+    readOnlyProvider = new ethers.JsonRpcProvider(currentNetwork.rpcUrl);
     readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, readOnlyProvider);
     
-    // Set contract to readOnlyContract if wallet is not connected
+    // Always set contract to readOnlyContract if wallet is not connected
     if (!contract) {
         contract = readOnlyContract;
         provider = readOnlyProvider;
@@ -778,9 +778,10 @@ function saveToCache(id, data) {
 async function loadGalleryItems() {
     if (isLoadingGallery) return;
     
-    // Wait for contract to be initialized
-    if (!contract) {
-        console.log('Contract not initialized yet, waiting...');
+    // Use readOnlyContract if contract is not available
+    const activeContract = contract || readOnlyContract;
+    if (!activeContract) {
+        console.log('No contract available, waiting...');
         return;
     }
     
@@ -811,7 +812,7 @@ async function loadGalleryItems() {
             } else {
                 // Load from contract
                 try {
-                    const uri = await contract.tokenURI(tokenId);
+                    const uri = await activeContract.tokenURI(tokenId);
                     const response = await fetch(uri);
                     const metadata = await response.json();
                     
@@ -906,9 +907,10 @@ async function showGalleryView() {
     window.history.pushState({ gallery: true }, '', window.location.pathname);
     
     // Wait for contract initialization if needed
-    if (!contract) {
+    const activeContract = contract || readOnlyContract;
+    if (!activeContract) {
         const checkContract = setInterval(() => {
-            if (contract) {
+            if (contract || readOnlyContract) {
                 clearInterval(checkContract);
                 // Load initial items if empty
                 if (galleryItems.length === 0) {
