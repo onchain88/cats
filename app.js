@@ -605,10 +605,10 @@ function displayNFT(tokenId, isAvailable, owner, tokenURI, price) {
                     </a>` : ''
                 }
             </div>
-            ${isAvailable ? 
-                `<button class="buy-button" onclick="buyNFT(${tokenId})">Buy Now</button>` :
-                isOwner ?
-                    `<button class="buy-button send-button" onclick="openSendModal(${tokenId}, '${metadata?.name || `Cat #${tokenId}`}')">Send</button>` :
+            ${isOwner ? 
+                `<button class="buy-button send-button" onclick="openSendModal(${tokenId}, '${metadata?.name || `Cat #${tokenId}`}')">Send</button>` :
+                isAvailable ?
+                    `<button class="buy-button" onclick="buyNFT(${tokenId})">Buy Now</button>` :
                     `<button class="buy-button" disabled>Sold</button>`
             }
         </div>
