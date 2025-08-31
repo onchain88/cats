@@ -160,7 +160,7 @@ async function switchToPolygon() {
 
 async function checkAdminStatus() {
     try {
-        const virtualOwner = await contract.virtualOwner();
+        const virtualOwner = await contract.owner();
         isAdmin = virtualOwner.toLowerCase() === userAddress.toLowerCase();
         
         if (isAdmin) {
@@ -252,7 +252,6 @@ async function loadAdminRoyaltyInfo() {
 
 function setupAdminControls() {
     document.getElementById('setPriceBtn').addEventListener('click', setPrice);
-    document.getElementById('airdropBtn').addEventListener('click', airdrop);
     document.getElementById('setRoyaltyBtn').addEventListener('click', setRoyalty);
     document.getElementById('withdrawBtn').addEventListener('click', withdraw);
     document.getElementById('copyRoyaltyAddress').addEventListener('click', copyRoyaltyAddress);
@@ -377,34 +376,6 @@ async function setPrice() {
     }
 }
 
-async function airdrop() {
-    const tokenIdInput = document.getElementById('airdropTokenId');
-    const addressInput = document.getElementById('airdropAddress');
-    const tokenId = tokenIdInput.value;
-    const recipient = addressInput.value;
-    
-    if (!tokenId || tokenId < 1 || tokenId > 10000) {
-        alert('Please enter a valid token ID between 1 and 10000');
-        return;
-    }
-    
-    if (!ethers.isAddress(recipient)) {
-        alert('Please enter a valid recipient address');
-        return;
-    }
-    
-    try {
-        const tx = await contract.airdrop(recipient, tokenId);
-        await tx.wait();
-        alert(`Successfully airdropped NFT #${tokenId} to ${recipient}`);
-        tokenIdInput.value = '';
-        addressInput.value = '';
-    } catch (error) {
-        console.error('Error airdropping:', error);
-        alert('Failed to airdrop: ' + error.message);
-    }
-}
-
 async function setRoyalty() {
     const receiverInput = document.getElementById('royaltyReceiver');
     const percentageInput = document.getElementById('royaltyPercentage');
@@ -518,20 +489,18 @@ async function searchNFT(tokenId = null) {
     bottomNav.style.display = 'none';
     
     try {
-        const exists = await contractToUse.exists(tokenId);
-        if (!exists) {
+        // Try to get the owner - if token doesn't exist, it will throw an error
+        let owner;
+        try {
+            owner = await contractToUse.ownerOf(tokenId);
+        } catch (error) {
             nftDisplay.innerHTML = '<p class="error">This NFT ID does not exist</p>';
             loadingIndicator.style.display = 'none';
             return;
         }
         
         const isAvailable = await contractToUse.isAvailable(tokenId);
-        let owner = null;
         let tokenURI = null;
-        
-        if (!isAvailable) {
-            owner = await contractToUse.ownerOf(tokenId);
-        }
         
         try {
             tokenURI = await contractToUse.tokenURI(tokenId);
