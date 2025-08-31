@@ -458,6 +458,22 @@ async function initReadOnlyContract() {
             console.error('Failed to establish connection after 3 attempts');
         }
         
+        // Test tokenURI for a few tokens
+        console.log('Testing tokenURI calls...');
+        for (let i = 1; i <= 5; i++) {
+            try {
+                // First check if token exists
+                const owner = await readOnlyContract.ownerOf(i);
+                console.log(`Token ${i} owner:`, owner);
+                
+                // Then try to get URI
+                const uri = await readOnlyContract.tokenURI(i);
+                console.log(`Token ${i} URI:`, uri);
+            } catch (error) {
+                console.error(`Token ${i} error:`, error.message);
+            }
+        }
+        
         // Set as default contract if no wallet connected
         if (!contract) {
             contract = readOnlyContract;
@@ -862,21 +878,12 @@ async function loadGalleryItems() {
     }
     
     try {
-        // Get total supply to know how many tokens exist
-        const totalSupply = await readOnlyContract.totalSupply();
-        const maxTokenId = Number(totalSupply);
-        
-        if (maxTokenId === 0) {
-            console.log('No tokens minted yet');
-            return;
-        }
-        
-        const startId = lastLoadedId ? lastLoadedId + 1 : Math.floor(Math.random() * Math.min(maxTokenId, 9000)) + 1;
+        const startId = lastLoadedId ? lastLoadedId + 1 : Math.floor(Math.random() * 900) + 1;
         const cache = getCachedData();
         
         for (let i = 0; i < ITEMS_PER_LOAD; i++) {
             const tokenId = startId + i;
-            if (tokenId > maxTokenId || tokenId > 10000) break;
+            if (tokenId > 1000) break;
             
             // Check cache first
             if (cache[tokenId]) {
@@ -884,32 +891,17 @@ async function loadGalleryItems() {
             } else {
                 // Load from contract
                 try {
-                    console.log(`Loading token ${tokenId} from contract...`);
-                    
-                    // First check if token exists by trying to get owner
-                    let tokenExists = false;
-                    try {
-                        await readOnlyContract.ownerOf(tokenId);
-                        tokenExists = true;
-                    } catch (ownerError) {
-                        // Token doesn't exist - this is expected for unminted tokens
-                        continue;
-                    }
-                    
-                    if (!tokenExists) continue;
-                    
-                    // Now safely get token URI
+                    // Try to get token URI directly
                     let uri;
                     try {
                         uri = await readOnlyContract.tokenURI(tokenId);
-                        console.log(`Token URI for ${tokenId}:`, uri);
-                    } catch (uriError) {
-                        console.warn(`Failed to get URI for token ${tokenId}:`, uriError.message);
+                    } catch (error) {
+                        // Token doesn't exist or has no metadata - skip silently
                         continue;
                     }
                     
                     if (!uri || uri === '0x') {
-                        console.log(`Token ${tokenId} has no URI`);
+                        // No URI - skip silently
                         continue;
                     }
                     
@@ -943,12 +935,11 @@ async function loadGalleryItems() {
                     saveToCache(tokenId, itemData);
                     addGalleryItem(tokenId, itemData);
                 } catch (error) {
-                    console.error(`Failed to load token ${tokenId}:`, error);
-                    // Skip tokens that don't exist
-                    if (error.code === 'BAD_DATA' || error.message.includes('could not decode result data')) {
-                        console.log(`Token ${tokenId} doesn't exist, skipping...`);
-                    }
+                    // Skip any errors silently
                 }
+                
+                // Add small delay between requests to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
         
