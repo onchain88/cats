@@ -747,11 +747,54 @@ window.buyNFT = async function (tokenId) {
 
   const buyButton = nftDisplay.querySelector(".buy-button");
   buyButton.disabled = true;
-  buyButton.textContent = "Processing...";
+  buyButton.textContent = "Checking...";
 
   try {
+    // Check if NFT is available
+    const isAvailable = await contract.isAvailable(tokenId);
+    if (!isAvailable) {
+      throw new Error("This NFT has already been sold");
+    }
+
+    // Get price and user balance
     const price = await contract.price();
-    const tx = await contract.buy(tokenId, { value: price });
+    const balance = await provider.getBalance(signer.getAddress());
+    
+    // Check if user has enough balance (price + estimated gas)
+    const gasEstimate = ethers.parseEther("0.01"); // Rough estimate for gas
+    const totalCost = price + gasEstimate;
+    
+    if (balance < totalCost) {
+      const priceInEth = ethers.formatEther(price);
+      const balanceInEth = ethers.formatEther(balance);
+      throw new Error(`Insufficient funds. Price: ${priceInEth} ETH, Your balance: ${balanceInEth} ETH`);
+    }
+
+    buyButton.textContent = "Processing...";
+
+    // Attempt to estimate gas first
+    let gasLimit;
+    try {
+      gasLimit = await contract.buy.estimateGas(tokenId, { value: price });
+      // Add 20% buffer to gas estimate
+      gasLimit = gasLimit * 120n / 100n;
+    } catch (gasError) {
+      console.error("Gas estimation failed:", gasError);
+      // Parse the error for more specific message
+      if (gasError.reason) {
+        throw new Error(gasError.reason);
+      } else if (gasError.message && gasError.message.includes("execution reverted")) {
+        throw new Error("Transaction would fail. The NFT may no longer be available.");
+      } else {
+        throw gasError;
+      }
+    }
+
+    // Send the transaction with estimated gas
+    const tx = await contract.buy(tokenId, { 
+      value: price,
+      gasLimit: gasLimit 
+    });
 
     buyButton.textContent = "Confirming...";
     await tx.wait();
@@ -761,7 +804,22 @@ window.buyNFT = async function (tokenId) {
     updateBottomNav(false);
   } catch (error) {
     console.error("Error buying NFT:", error);
-    alert("Failed to buy NFT: " + error.message);
+    
+    // Provide user-friendly error messages
+    let errorMessage = "Failed to buy NFT: ";
+    if (error.message) {
+      errorMessage += error.message;
+    } else if (error.reason) {
+      errorMessage += error.reason;
+    } else if (error.code === "INSUFFICIENT_FUNDS") {
+      errorMessage += "Insufficient funds in wallet";
+    } else if (error.code === "CALL_EXCEPTION") {
+      errorMessage += "Transaction would fail. The NFT may no longer be available.";
+    } else {
+      errorMessage += "Unknown error occurred";
+    }
+    
+    alert(errorMessage);
     buyButton.disabled = false;
     buyButton.textContent = "Buy Now";
   }
